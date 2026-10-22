@@ -29,12 +29,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -61,19 +65,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import my.belalang.booking.data.JobCard
-import my.belalang.booking.data.ServiceType
 import my.belalang.booking.data.StepConfig
+import my.belalang.booking.domain.ServiceClass
 import my.belalang.booking.domain.SortKey
 
 @Composable
 fun BookingApp(vm: BookingViewModel) {
     val s by vm.state.collectAsStateWithLifecycle()
     val selected = s.selected
-    BackHandler(enabled = selected != null) { vm.select(null) }
+    BackHandler(enabled = selected != null || s.showFilters) {
+        if (selected != null) vm.select(null) else vm.openFilters(false)
+    }
 
     Scaffold(containerColor = Neon.Bg) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 12.dp)) {
-            if (selected == null) JobListScreen(vm, s) else JobDetailScreen(vm, s, selected)
+            when {
+                selected != null -> JobDetailScreen(vm, s, selected)
+                s.showFilters -> FilterScreen(vm, s)
+                else -> JobListScreen(vm, s)
+            }
         }
     }
 }
@@ -195,10 +205,7 @@ private fun JobListScreen(vm: BookingViewModel, s: UiState) {
         contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
     ) {
         item { Header(vm, s) }
-        item { ServiceModule(vm, s) }
-        item { FareModule(vm, s) }
-        item { TimeModule(vm, s) }
-        item { CriteriaModule(vm, s) }
+        item { FilterSummary(vm, s) }
         item { ListHeader(vm, s, rows.size) }
         items(rows, key = { it.job.id }) { row -> JobCardView(row) { vm.select(row.job) } }
         item { ToolsModule(vm, s) }
@@ -239,68 +246,136 @@ private fun Header(vm: BookingViewModel, s: UiState) {
 }
 
 @Composable
-private fun ServiceModule(vm: BookingViewModel, s: UiState) {
-    Module("A", "SERVIS", summary = s.serviceType.label, startOpen = true) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ServiceType.entries.forEach { t ->
-                FilterChip(
-                    selected = s.serviceType == t,
-                    onClick = { vm.setServiceType(t) },
-                    label = { Text(t.label) },
-                    colors = chipColors(),
+private fun FilterSummary(vm: BookingViewModel, s: UiState) {
+    NeonCard {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "PENAPIS", color = Neon.Text, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                    letterSpacing = 1.sp, modifier = Modifier.weight(1f),
                 )
+                OutlinedButton(onClick = { vm.openFilters(true) }, colors = ghostButtonColors()) {
+                    Text("TETAPAN", fontWeight = FontWeight.Bold)
+                }
             }
-        }
-    }
-}
-
-@Composable
-private fun FareModule(vm: BookingViewModel, s: UiState) {
-    val sum = when {
-        s.fareMin.isBlank() && s.fareMax.isBlank() -> "Semua"
-        else -> "RM${s.fareMin.ifBlank { "0" }} - ${s.fareMax.ifBlank { "∞" }}"
-    }
-    Module("B", "TAPISAN TAMBANG", summary = sum) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NeonField(s.fareMin, vm::setFareMin, "Min (RM)", Modifier.weight(1f), singleLine = true)
-            NeonField(s.fareMax, vm::setFareMax, "Maks (RM)", Modifier.weight(1f), singleLine = true)
+            Text(s.filterSummary, color = Neon.Muted, fontSize = 12.sp)
         }
     }
 }
 
 private fun hourLabel(h: Int): String {
     val h12 = if (h % 12 == 0) 12 else h % 12
-    return "$h12 ${if (h < 12) "AM" else "PM"}"
+    return "%02d %s".format(h12, if (h < 12) "AM" else "PM")
 }
 
 @Composable
-private fun TimeModule(vm: BookingViewModel, s: UiState) {
-    Module("C", "MASA", summary = if (s.hours.isEmpty()) "Semua jam" else "${s.hours.size} jam dipilih") {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            FilterChip(
-                selected = s.hours.isEmpty(), onClick = vm::clearHours,
-                label = { Text("Semua jam") }, colors = chipColors(),
-            )
-            (0..23).forEach { h ->
-                FilterChip(
-                    selected = h in s.hours, onClick = { vm.toggleHour(h) },
-                    label = { Text(hourLabel(h)) }, colors = chipColors(),
-                )
-            }
-        }
+private fun CheckRow(label: String, checked: Boolean, modifier: Modifier = Modifier, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier.clickable { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = checked, onCheckedChange = onChange,
+            colors = CheckboxDefaults.colors(
+                checkedColor = Neon.Cyan, uncheckedColor = Neon.Muted, checkmarkColor = Neon.Bg,
+            ),
+        )
+        Text(label, color = Neon.Text, fontSize = 13.sp)
     }
 }
 
 @Composable
-private fun CriteriaModule(vm: BookingViewModel, s: UiState) {
-    val n = listOf(s.includeLocations, s.avoidLocations, s.maxKm).count { it.isNotBlank() }
-    Module("D", "CRITERIA LOKASI & JARAK", summary = if (n == 0) "Tiada" else "$n aktif") {
-        NeonField(s.includeLocations, vm::setInclude, "Lokasi dikehendaki (asing dengan koma)")
-        NeonField(s.avoidLocations, vm::setAvoid, "Lokasi dielakkan (asing dengan koma)")
-        NeonField(s.maxKm, vm::setMaxKm, "Jarak maksimum (km)", singleLine = true)
+private fun ToggleRow(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = Neon.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(if (on) "ON" else "OFF", color = if (on) Neon.Cyan else Neon.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Switch(checked = on, onCheckedChange = onChange, colors = switchColors())
+    }
+}
+
+@Composable
+private fun RadioRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(Modifier.clickable(onClick = onSelect), verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(
+            selected = selected, onClick = onSelect,
+            colors = RadioButtonDefaults.colors(selectedColor = Neon.Cyan, unselectedColor = Neon.Muted),
+        )
+        Text(label, color = Neon.Text, fontSize = 13.sp)
+    }
+}
+
+/** Skrin tetapan penapis, susunan seperti V4 (modul A, B, C, E). */
+@Composable
+private fun FilterScreen(vm: BookingViewModel, s: UiState) {
+    Column(
+        Modifier.verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { vm.openFilters(false) }) {
+                Text("← KEMBALI", color = Neon.Cyan, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.weight(1f))
+            Text("TETAPAN PENAPIS", color = Neon.Muted, fontSize = 12.sp, letterSpacing = 1.sp)
+        }
+
+        Module("A", "SERVICE TYPE", summary = if (s.serviceClasses.isEmpty()) "Semua" else "${s.serviceClasses.size} dipilih", startOpen = true) {
+            Text("PILIH SERVICE YANG NAK DIAMBIL", color = Neon.Muted, fontSize = 11.sp, letterSpacing = 1.sp)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ServiceClass.entries.forEach { c ->
+                    CheckRow(c.label, c in s.serviceClasses, Modifier.width(160.dp)) { vm.toggleServiceClass(c) }
+                }
+            }
+            Text("Tiada yang dipilih = semua servis.", color = Neon.Muted, fontSize = 11.sp)
+        }
+
+        Module("B", "JOB FILTER", startOpen = true) {
+            ToggleRow("TO KLIA", s.toKlia, vm::setToKlia)
+            ToggleRow("FROM KLIA", s.fromKlia, vm::setFromKlia)
+            ToggleRow("FARE NORMAL", s.normalOn, vm::setNormalOn)
+            NeonField(s.minFareKlia, vm::setMinFareKlia, "HARGA MINIMUM - FARE KLIA (RM)", singleLine = true)
+            NeonField(s.minFareNormal, vm::setMinFareNormal, "HARGA MINIMUM - FARE NORMAL (RM)", singleLine = true)
+            Text(
+                "Tiada suis ON = tiada tapisan kategori dan harga minimum.",
+                color = Neon.Muted, fontSize = 11.sp,
+            )
+        }
+
+        Module("C", "TIME", summary = if (s.timeAll) "Semua Masa" else "${s.hours.size} jam", startOpen = true) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RadioRow("Semua Masa", s.timeAll) { vm.setTimeAll(true) }
+                RadioRow("Pilih Masa", !s.timeAll) { vm.setTimeAll(false) }
+            }
+            if (!s.timeAll) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = vm::selectAllHours, colors = ghostButtonColors()) { Text("PILIH SEMUA MASA") }
+                    OutlinedButton(onClick = vm::clearHours, colors = ghostButtonColors()) { Text("KOSONGKAN") }
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    (0..23).forEach { h ->
+                        CheckRow(hourLabel(h), h in s.hours, Modifier.width(96.dp)) { vm.toggleHour(h) }
+                    }
+                }
+            }
+        }
+
+        Module("E", "PICKUP KM & AVOID AREA", startOpen = true) {
+            NeonField(s.maxKm, vm::setMaxKm, "MAXIMUM JARAK PICKUP (km)", singleLine = true)
+            Text("Jarak datang dari Step 2; job tanpa jarak ditolak bila had diisi.", color = Neon.Muted, fontSize = 11.sp)
+            ToggleRow("KAWASAN (AVOID AREA)", s.areaOn, vm::setAreaOn)
+            if (s.areaOn) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RadioRow("ELAK kawasan ini", s.areaAvoid) { vm.setAreaAvoid(true) }
+                    RadioRow("HANYA kawasan ini", !s.areaAvoid) { vm.setAreaAvoid(false) }
+                }
+                NeonField(s.areaKeywords, vm::setAreaKeywords, "TULIS KAWASAN (KEYWORD, PISAH DENGAN KOMA)")
+            }
+        }
+
+        Button(
+            onClick = vm::saveFilters, colors = primaryButtonColors(),
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        ) { Text("SIMPAN TETAPAN", fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp) }
     }
 }
 
@@ -309,7 +384,7 @@ private fun ListHeader(vm: BookingViewModel, s: UiState, shown: Int) {
     NeonCard {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Badge("E")
+                Badge("J")
                 Text(
                     "SENARAI JOB", color = Neon.Text, fontWeight = FontWeight.Bold, fontSize = 14.sp,
                     letterSpacing = 1.sp, modifier = Modifier.weight(1f),
@@ -380,12 +455,12 @@ private fun JobCardView(row: JobRow, onClick: (() -> Unit)?) {
     }
 }
 
-/** F: tetapan auto-refresh dan LOG. */
+/** L: tetapan auto-refresh dan LOG. */
 @Composable
 private fun ToolsModule(vm: BookingViewModel, s: UiState) {
     val clipboard = LocalClipboardManager.current
     val text = s.logs.takeLast(120).joinToString("\n") { "${it.time} ${it.text}" }
-    Module("F", "AUTO-REFRESH & LOG", summary = "LOG ${s.logs.size}", startOpen = true) {
+    Module("L", "AUTO-REFRESH & LOG", summary = "LOG ${s.logs.size}", startOpen = true) {
         Text("Selang: ${s.intervalSec} saat (min 5)", color = Neon.Muted, fontSize = 12.sp)
         Slider(
             value = s.intervalSec.toFloat(),

@@ -20,6 +20,7 @@ import my.belalang.booking.data.ServiceType
 import my.belalang.booking.data.StepConfig
 import my.belalang.booking.domain.Criteria
 import my.belalang.booking.domain.JobFilterEngine
+import my.belalang.booking.domain.ServiceClass
 import my.belalang.booking.domain.SortKey
 import my.belalang.booking.domain.Step1Filter
 import java.text.SimpleDateFormat
@@ -54,15 +55,25 @@ data class UiState(
     val listStatus: String = "Belum dimuat.",
     val listLoading: Boolean = false,
 
-    // Tapisan Step 1
+    /** Hanya untuk pengganti `{serviceType}` dalam URL/body Step 1 (tiada UI). */
     val serviceType: ServiceType = ServiceType.NORMAL,
-    val fareMin: String = "",
-    val fareMax: String = "",
+    // A. Servis
+    val serviceClasses: Set<ServiceClass> = emptySet(),
+    // B. Job filter
+    val toKlia: Boolean = false,
+    val fromKlia: Boolean = false,
+    val normalOn: Boolean = false,
+    val minFareKlia: String = "",
+    val minFareNormal: String = "",
+    // C. Masa
+    val timeAll: Boolean = true,
     val hours: Set<Int> = emptySet(),
-    // Criteria Step 2
-    val includeLocations: String = "",
-    val avoidLocations: String = "",
+    // E. Jarak dan kawasan
     val maxKm: String = "",
+    val areaOn: Boolean = false,
+    val areaAvoid: Boolean = true,
+    val areaKeywords: String = "",
+    val showFilters: Boolean = false,
     // Paparan
     val query: String = "",
     val hideRejected: Boolean = true,
@@ -80,19 +91,46 @@ data class UiState(
 ) {
     val step1Filter: Step1Filter
         get() = Step1Filter(
-            serviceType = serviceType,
+            serviceClasses = serviceClasses,
+            toKlia = toKlia,
+            fromKlia = fromKlia,
+            normalOn = normalOn,
+            minFareKlia = minFareKlia.trim().toDoubleOrNull(),
+            minFareNormal = minFareNormal.trim().toDoubleOrNull(),
             kliaKeywords = configs[StepConfig.STEP1]?.kliaKeywords.orEmpty().ifEmpty { DEFAULT_KLIA_KEYWORDS },
-            fareMin = fareMin.trim().toDoubleOrNull(),
-            fareMax = fareMax.trim().toDoubleOrNull(),
+            timeAll = timeAll,
             hours = hours,
+            areaOn = areaOn,
+            areaAvoid = areaAvoid,
+            areaKeywords = JobFilterEngine.splitList(areaKeywords),
         )
 
     val criteria: Criteria
-        get() = Criteria(
-            includeLocations = JobFilterEngine.splitList(includeLocations),
-            avoidLocations = JobFilterEngine.splitList(avoidLocations),
-            maxKm = maxKm.trim().toDoubleOrNull(),
-        )
+        get() {
+            val kw = if (areaOn) JobFilterEngine.splitList(areaKeywords) else emptyList()
+            return Criteria(
+                includeLocations = if (areaAvoid) emptyList() else kw,
+                avoidLocations = if (areaAvoid) kw else emptyList(),
+                maxKm = maxKm.trim().toDoubleOrNull(),
+            )
+        }
+
+    /** Ringkasan penapis aktif untuk skrin utama. */
+    val filterSummary: String
+        get() {
+            val parts = mutableListOf<String>()
+            if (serviceClasses.isNotEmpty()) parts.add("Servis: " + serviceClasses.joinToString(", ") { it.label })
+            val cats = listOfNotNull(
+                if (toKlia) "To KLIA" + minFareKlia.trim().takeIf { it.isNotEmpty() }?.let { " ≥RM$it" }.orEmpty() else null,
+                if (fromKlia) "From KLIA" else null,
+                if (normalOn) "Normal" + minFareNormal.trim().takeIf { it.isNotEmpty() }?.let { " ≥RM$it" }.orEmpty() else null,
+            )
+            if (cats.isNotEmpty()) parts.add(cats.joinToString(" · "))
+            if (!timeAll) parts.add(if (hours.isEmpty()) "Masa: tiada" else "Masa: ${hours.size} jam")
+            if (maxKm.isNotBlank()) parts.add("≤ ${maxKm.trim()} km")
+            if (areaOn && areaKeywords.isNotBlank()) parts.add((if (areaAvoid) "Elak: " else "Hanya: ") + areaKeywords.trim())
+            return if (parts.isEmpty()) "Tiada penapis (semua job)" else parts.joinToString("  |  ")
+        }
 
     fun evalOf(job: JobCard): JobEval {
         val d1 = JobFilterEngine.checkStep1(job, step1Filter)
@@ -137,6 +175,7 @@ class BookingViewModel(app: Application) : AndroidViewModel(app) {
     private var autoJob: Job? = null
 
     init {
+        loadFilters()
         // Buka app -> baca konfigurasi Firestore -> auto-fetch Step 1 sekali (baca sahaja).
         viewModelScope.launch {
             _state.update { it.copy(configLoading = true) }
@@ -169,21 +208,72 @@ class BookingViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- Penapis (UI sahaja) -----------------------------------------------------------------
-    fun setServiceType(t: ServiceType) = _state.update { it.copy(serviceType = t) }
-    fun setFareMin(v: String) = _state.update { it.copy(fareMin = v) }
-    fun setFareMax(v: String) = _state.update { it.copy(fareMax = v) }
+    // ---- Penapis ---------------------------------------------------------------------------
+    fun toggleServiceClass(c: ServiceClass) = _state.update {
+        it.copy(serviceClasses = if (c in it.serviceClasses) it.serviceClasses - c else it.serviceClasses + c)
+    }
+    fun setToKlia(v: Boolean) = _state.update { it.copy(toKlia = v) }
+    fun setFromKlia(v: Boolean) = _state.update { it.copy(fromKlia = v) }
+    fun setNormalOn(v: Boolean) = _state.update { it.copy(normalOn = v) }
+    fun setMinFareKlia(v: String) = _state.update { it.copy(minFareKlia = v) }
+    fun setMinFareNormal(v: String) = _state.update { it.copy(minFareNormal = v) }
+    fun setTimeAll(v: Boolean) = _state.update { it.copy(timeAll = v) }
     fun toggleHour(h: Int) = _state.update {
         it.copy(hours = if (h in it.hours) it.hours - h else it.hours + h)
     }
+    fun selectAllHours() = _state.update { it.copy(hours = (0..23).toSet()) }
     fun clearHours() = _state.update { it.copy(hours = emptySet()) }
-    fun setQuery(v: String) = _state.update { it.copy(query = v) }
-    fun setInclude(v: String) = _state.update { it.copy(includeLocations = v) }
-    fun setAvoid(v: String) = _state.update { it.copy(avoidLocations = v) }
     fun setMaxKm(v: String) = _state.update { it.copy(maxKm = v) }
+    fun setAreaOn(v: Boolean) = _state.update { it.copy(areaOn = v) }
+    fun setAreaAvoid(v: Boolean) = _state.update { it.copy(areaAvoid = v) }
+    fun setAreaKeywords(v: String) = _state.update { it.copy(areaKeywords = v) }
+    fun setQuery(v: String) = _state.update { it.copy(query = v) }
     fun setHideRejected(v: Boolean) = _state.update { it.copy(hideRejected = v) }
     fun setSort(k: SortKey) = _state.update {
         if (it.sortKey == k) it.copy(ascending = !it.ascending) else it.copy(sortKey = k, ascending = true)
+    }
+    fun openFilters(v: Boolean) = _state.update { it.copy(showFilters = v) }
+
+    // ---- Simpan / muat tetapan penapis (SharedPreferences tempatan; tiada rahsia) ------------
+    private val prefs get() = getApplication<Application>().getSharedPreferences("belalangv_filters", 0)
+
+    private fun loadFilters() {
+        val p = prefs
+        _state.update {
+            it.copy(
+                serviceClasses = p.getStringSet("serviceClasses", emptySet()).orEmpty()
+                    .mapNotNull { n -> ServiceClass.entries.firstOrNull { e -> e.name == n } }.toSet(),
+                toKlia = p.getBoolean("toKlia", false),
+                fromKlia = p.getBoolean("fromKlia", false),
+                normalOn = p.getBoolean("normalOn", false),
+                minFareKlia = p.getString("minFareKlia", "").orEmpty(),
+                minFareNormal = p.getString("minFareNormal", "").orEmpty(),
+                timeAll = p.getBoolean("timeAll", true),
+                hours = p.getStringSet("hours", emptySet()).orEmpty().mapNotNull { h -> h.toIntOrNull() }.toSet(),
+                maxKm = p.getString("maxKm", "").orEmpty(),
+                areaOn = p.getBoolean("areaOn", false),
+                areaAvoid = p.getBoolean("areaAvoid", true),
+                areaKeywords = p.getString("areaKeywords", "").orEmpty(),
+            )
+        }
+    }
+
+    /** SIMPAN TETAPAN: simpan, tutup skrin penapis, dan muat semula senarai dengan penapis baharu. */
+    fun saveFilters() {
+        val s = _state.value
+        prefs.edit()
+            .putStringSet("serviceClasses", s.serviceClasses.map { it.name }.toSet())
+            .putBoolean("toKlia", s.toKlia).putBoolean("fromKlia", s.fromKlia).putBoolean("normalOn", s.normalOn)
+            .putString("minFareKlia", s.minFareKlia).putString("minFareNormal", s.minFareNormal)
+            .putBoolean("timeAll", s.timeAll)
+            .putStringSet("hours", s.hours.map { it.toString() }.toSet())
+            .putString("maxKm", s.maxKm)
+            .putBoolean("areaOn", s.areaOn).putBoolean("areaAvoid", s.areaAvoid)
+            .putString("areaKeywords", s.areaKeywords)
+            .apply()
+        _state.update { it.copy(showFilters = false) }
+        log("Tetapan penapis disimpan: ${s.filterSummary}")
+        refreshJobs()
     }
 
     // ---- Pusingan: Step 1 (senarai) -> tapisan -> Step 2 (butiran) -> criteria ---------------

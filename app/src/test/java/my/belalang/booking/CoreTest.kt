@@ -4,11 +4,12 @@ import my.belalang.booking.data.JobCard
 import my.belalang.booking.data.JobDetail
 import my.belalang.booking.data.JobParser
 import my.belalang.booking.data.JsonPath
-import my.belalang.booking.data.ServiceType
 import my.belalang.booking.data.StepConfig
 import my.belalang.booking.data.Template
 import my.belalang.booking.domain.Criteria
+import my.belalang.booking.domain.JobCategory
 import my.belalang.booking.domain.JobFilterEngine
+import my.belalang.booking.domain.ServiceClass
 import my.belalang.booking.domain.Step1Filter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -95,27 +96,61 @@ class CoreTest {
         assertNull(JobFilterEngine.parseHour(null))
     }
 
-    @Test fun step1Filter_serviceFareHour() {
+    @Test fun step1Filter_categoryFareHourService() {
         val jobs = JobParser.parse(step1, list).jobs
         val kw = listOf("KLIA")
         fun ids(f: Step1Filter) = jobs.filter { JobFilterEngine.checkStep1(it, f).pass }.map { it.id }
 
-        assertEquals(listOf("A1", "A3"), ids(Step1Filter(ServiceType.KLIA, kw)))
-        assertEquals(listOf("A2"), ids(Step1Filter(ServiceType.NORMAL, kw)))
-        // Tiada kata kunci dikonfigurasi: tiada tapisan jenis servis.
-        assertEquals(listOf("A1", "A2", "A3"), ids(Step1Filter(ServiceType.KLIA, emptyList())))
-        // Tambang
-        assertEquals(listOf("A1", "A3"), ids(Step1Filter(ServiceType.KLIA, kw, fareMin = 80.0)))
-        assertEquals(listOf("A1"), ids(Step1Filter(ServiceType.KLIA, kw, fareMin = 80.0, fareMax = 100.0)))
-        // Jam: 6 AM sahaja
-        assertEquals(listOf("A1"), ids(Step1Filter(ServiceType.KLIA, kw, hours = setOf(6))))
-        assertEquals(listOf("A3"), ids(Step1Filter(ServiceType.KLIA, kw, hours = setOf(17))))
+        // Tiada penapis aktif: semua lulus
+        assertEquals(listOf("A1", "A2", "A3"), ids(Step1Filter(kliaKeywords = kw)))
+        // Kategori: To KLIA sahaja / Normal sahaja
+        assertEquals(listOf("A1", "A3"), ids(Step1Filter(toKlia = true, kliaKeywords = kw)))
+        assertEquals(listOf("A2"), ids(Step1Filter(normalOn = true, kliaKeywords = kw)))
+        // Harga minimum KLIA
+        assertEquals(listOf("A3"), ids(Step1Filter(toKlia = true, minFareKlia = 100.0, kliaKeywords = kw)))
+        // Harga minimum Normal menapis job Normal sahaja
+        assertEquals(emptyList<String>(), ids(Step1Filter(normalOn = true, minFareNormal = 50.0, kliaKeywords = kw)))
+        // Servis berbilang pilihan
+        assertEquals(listOf("A3"), ids(Step1Filter(serviceClasses = setOf(ServiceClass.PLUS), kliaKeywords = kw)))
+        assertEquals(
+            listOf("A1", "A2"),
+            ids(Step1Filter(serviceClasses = setOf(ServiceClass.STANDARD), kliaKeywords = kw)),
+        )
+        // Masa: Pilih Masa
+        assertEquals(listOf("A1"), ids(Step1Filter(timeAll = false, hours = setOf(6), kliaKeywords = kw)))
+        assertEquals(listOf("A3"), ids(Step1Filter(timeAll = false, hours = setOf(17), kliaKeywords = kw)))
+        assertEquals(emptyList<String>(), ids(Step1Filter(timeAll = false, hours = emptySet(), kliaKeywords = kw)))
+    }
+
+    @Test fun categoryOf_fromKliaUsesPickup() {
+        val kw = listOf("KLIA")
+        assertEquals(JobCategory.FROM_KLIA, JobFilterEngine.categoryOf(JobCard(id = "1", pickup = "KLIA T2", dropoff = "KL Sentral"), kw))
+        assertEquals(JobCategory.TO_KLIA, JobFilterEngine.categoryOf(JobCard(id = "2", pickup = "Taman A", dropoff = "KLIA T1"), kw))
+        assertEquals(JobCategory.NORMAL, JobFilterEngine.categoryOf(JobCard(id = "3", pickup = "Taman A", dropoff = "Mid Valley"), kw))
+        assertEquals(JobCategory.NORMAL, JobFilterEngine.categoryOf(JobCard(id = "4", dropoff = "KLIA T1"), emptyList()))
+    }
+
+    @Test fun step1Filter_areaAvoidAndOnly() {
+        val j = JobCard(id = "1", pickup = "Taman A", dropoff = "KLIA T1")
+        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(areaOn = true, areaAvoid = true, areaKeywords = listOf("taman a"))).pass)
+        assertTrue(JobFilterEngine.checkStep1(j, Step1Filter(areaOn = true, areaAvoid = false, areaKeywords = listOf("klia"))).pass)
+        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(areaOn = true, areaAvoid = false, areaKeywords = listOf("ipoh"))).pass)
+        // Tiada pickup/drop-off dalam data Step 1: ditangguh ke Step 2
+        assertTrue(JobFilterEngine.checkStep1(JobCard(id = "2"), Step1Filter(areaOn = true, areaKeywords = listOf("x"))).pass)
+    }
+
+    @Test fun serviceClass_matchesCombinedLabels() {
+        assertTrue(ServiceClass.STANDARD.pattern.containsMatchIn("Advance Standard | Plus"))
+        assertTrue(ServiceClass.PLUS.pattern.containsMatchIn("Advance Standard | Plus"))
+        assertFalse(ServiceClass.PLUS.pattern.containsMatchIn("Standard"))
+        assertTrue(ServiceClass.PREMIUM_EV.pattern.containsMatchIn("Premium | EV"))
+        assertTrue(ServiceClass.EV_6_SEATS.pattern.containsMatchIn("EV 6 Seats"))
     }
 
     @Test fun step1Filter_reportsReasonForUnreadableValues() {
-        val j = JobCard(id = "Z", fare = "percuma", time = "pagi")
-        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(fareMin = 1.0)).pass)
-        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(hours = setOf(6))).pass)
+        val j = JobCard(id = "Z", fare = "percuma", time = "pagi", serviceType = "Normal")
+        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(normalOn = true, minFareNormal = 1.0)).pass)
+        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(timeAll = false, hours = setOf(6))).pass)
         // Tanpa tapisan aktif, nilai yang tak boleh dibaca tidak menghalang.
         assertTrue(JobFilterEngine.checkStep1(j, Step1Filter()).pass)
     }
