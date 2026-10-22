@@ -170,7 +170,7 @@ private fun RefreshPanel(vm: BookingViewModel, s: UiState) {
 
 @Composable
 private fun JobCardView(job: JobCard, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), onClick = onClick) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(job.title ?: "Job ${job.id}", style = MaterialTheme.typography.titleSmall)
             job.pickup?.let { Text("Ambil: $it", style = MaterialTheme.typography.bodySmall) }
