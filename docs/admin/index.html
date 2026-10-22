@@ -151,18 +151,23 @@ async function save(s){
 function setSave(){document.querySelectorAll(".save").forEach(b=>b.disabled=!(user&&db))}
 
 // ---------- Connect / auth ----------
+function showErr(t){const m=$("#connMsg");m.textContent=t;m.className="err"}
 function connect(){
   const apiKey=$("#apiKey").value.trim(),projectId=$("#projectId").value.trim();
-  if(!apiKey||!projectId)return $("#connMsg").textContent="Isi API key dan Project ID";
-  try{localStorage.setItem("bv_admin",JSON.stringify({apiKey,projectId}))}catch{}
-  const app=initializeApp({apiKey,projectId,authDomain:projectId+".firebaseapp.com"},"admin"+Date.now());
-  auth=getAuth(app);db=getFirestore(app);
-  onAuthStateChanged(auth,u=>{user=u;$("#who").textContent=u?u.email:"belum log masuk";$("#btnLogout").disabled=!u;$("#btnLogin").disabled=!!u;setSave()});
-  $("#btnLogin").disabled=false;
-  $("#connMsg").textContent="Tersambung. Memuat dokumen...";$("#connMsg").className="mut ok";
-  STEPS.forEach(load);
+  if(!apiKey||!projectId)return showErr("Isi API key dan Project ID");
+  try{
+    try{localStorage.setItem("bv_admin",JSON.stringify({apiKey,projectId}))}catch{}
+    const app=initializeApp({apiKey,projectId,authDomain:projectId+".firebaseapp.com"},"admin"+Date.now());
+    auth=getAuth(app);db=getFirestore(app);
+    onAuthStateChanged(auth,u=>{user=u;$("#who").textContent=u?u.email:"belum log masuk";$("#btnLogout").disabled=!u;$("#btnLogin").disabled=!!u;setSave()});
+    $("#btnLogin").disabled=false;
+    $("#connMsg").textContent="Tersambung. Memuat dokumen...";$("#connMsg").className="mut ok";
+    STEPS.forEach(load);
+  }catch(e){showErr("Gagal sambung: "+(e.code||"")+" "+(e.message||e))}
 }
-$("#btnConn").onclick=connect;
+window.addEventListener("error",e=>showErr("Ralat skrip: "+e.message));
+window.addEventListener("unhandledrejection",e=>showErr("Ralat: "+(e.reason&&(e.reason.code||e.reason.message)||e.reason)));
+$("#btnConn").onclick=()=>{$("#connMsg").textContent="Menyambung...";$("#connMsg").className="mut";connect()};
 $("#btnLogin").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){$("#connMsg").textContent="Log masuk gagal: "+e.code+(e.code==="auth/unauthorized-domain"?" (tambah domain halaman ini di Firebase → Authentication → Settings → Authorized domains)":"");$("#connMsg").className="err"}};
 $("#btnLogout").onclick=()=>signOut(auth);
 
