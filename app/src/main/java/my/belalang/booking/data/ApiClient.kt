@@ -15,7 +15,7 @@ object Template {
     fun apply(s: String, vars: Map<String, String>, urlEncode: Boolean = false): String {
         var r = s
         for ((k, v) in vars) {
-            val value = if (urlEncode) URLEncoder.encode(v, "UTF-8") else v
+            val value = if (urlEncode) URLEncoder.encode(v, "UTF-8").replace("+", "%20") else v
             r = r.replace("{$k}", value)
         }
         return r
