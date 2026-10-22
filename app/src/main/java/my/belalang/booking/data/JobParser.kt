@@ -14,6 +14,13 @@ data class DetailResult(val detail: JobDetail?, val error: String?)
 object JobParser {
     private val NUMBER = Regex("[-+]?[0-9]*\\.?[0-9]+")
 
+    /** Hanya nama kunci aras atas (bukan nilai) untuk bantu nyahpepijat. */
+    fun describe(root: Any?): String = when (root) {
+        is JSONObject -> "objek, kunci: " + root.keys().asSequence().take(12).joinToString(", ").ifEmpty { "(kosong)" }
+        is JSONArray -> "array, ${root.length()} item"
+        else -> "tidak diketahui"
+    }
+
     fun extractNumber(s: String?): Double? = s?.let { NUMBER.find(it)?.value?.toDoubleOrNull() }
 
     fun parse(cfg: StepConfig, body: String): ParseResult {
@@ -23,7 +30,10 @@ object JobParser {
             return ParseResult(emptyList(), "fieldMap.id belum diset dalam ${cfg.id}.")
         }
         val list = JsonPath.resolve(root, cfg.listPath) as? JSONArray
-            ?: return ParseResult(emptyList(), "listPath '${cfg.listPath ?: "$"}' tidak menghala ke array dalam respons.")
+            ?: return ParseResult(
+                emptyList(),
+                "listPath '${cfg.listPath ?: "$"}' tidak menghala ke array dalam respons. Bentuk respons: ${describe(root)}",
+            )
 
         val jobs = mutableListOf<JobCard>()
         for (i in 0 until list.length()) {
