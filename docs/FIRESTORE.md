@@ -52,3 +52,22 @@ service cloud.firestore {
 }
 ```
 Pertimbangkan Firebase Auth/App Check jika konfigurasi tidak sepatutnya boleh dibaca umum.
+
+## Contoh mock (data rekaan di repo ini)
+
+`step1_job_list`
+- `url` (string): `https://raw.githubusercontent.com/syaamilmahazam7-oss/BelalangV/main/docs/mock/list.json`
+- `method` (string): `GET`
+- `enabled` (boolean): `true`
+- `listPath` (string): `result.items`
+- `fieldMap` (map, semua string): `id`=`bookingRef`, `serviceType`=`service`, `fare`=`price`, `time`=`pickupTime`
+- `kliaKeywords` (array): `KLIA`
+
+`step2_job_details`
+- `url` (string): `https://raw.githubusercontent.com/syaamilmahazam7-oss/BelalangV/main/docs/mock/detail/{jobId}.json`
+- `method` (string): `GET`
+- `enabled` (boolean): `true`
+- `detailPath` (string): `booking`
+- `fieldMap` (map, semua string): `pickup`=`from`, `dropoff`=`to`, `distanceKm`=`distanceKm`
+
+`step3_confirmation` dan `step4_future`: `enabled` (boolean) = `false`.

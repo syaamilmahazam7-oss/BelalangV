@@ -1,0 +1,42 @@
+{
+  "result": {
+    "items": [
+      {
+        "bookingRef": "MOCK-001",
+        "service": "Standard (To KLIA)",
+        "price": "RM86.00",
+        "pickupTime": "06:30 AM"
+      },
+      {
+        "bookingRef": "MOCK-002",
+        "service": "Standard (To KLIA)",
+        "price": "RM92.00",
+        "pickupTime": "06:00 AM"
+      },
+      {
+        "bookingRef": "MOCK-003",
+        "service": "Standard",
+        "price": "RM21.00",
+        "pickupTime": "05:30 PM"
+      },
+      {
+        "bookingRef": "MOCK-004",
+        "service": "Plus (To KLIA)",
+        "price": "RM110.00",
+        "pickupTime": "07:15 AM"
+      },
+      {
+        "bookingRef": "MOCK-005",
+        "service": "Standard",
+        "price": "RM37.00",
+        "pickupTime": "07:00 PM"
+      },
+      {
+        "bookingRef": "MOCK-006",
+        "service": "Standard (To KLIA)",
+        "price": "RM75.00",
+        "pickupTime": "08:45 AM"
+      }
+    ]
+  }
+}
