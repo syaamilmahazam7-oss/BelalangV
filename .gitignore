@@ -1,0 +1,13 @@
+*.iml
+.gradle/
+build/
+local.properties
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+# Rahsia - JANGAN commit
+google-services.json
+*.keystore
+*.jks
+keystore.properties
