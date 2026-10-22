@@ -5,6 +5,8 @@ import org.json.JSONObject
 
 data class ParseResult(val jobs: List<JobCard>, val error: String?)
 
+data class DetailResult(val detail: JobDetail?, val error: String?)
+
 /**
  * Menukar respons senarai job kepada kad berdasarkan `listPath` dan `fieldMap` dari Firestore.
  * TIADA andaian tentang format respons: jika konfigurasi tiada, ralat dilaporkan.
@@ -44,5 +46,26 @@ object JobParser {
             )
         }
         return ParseResult(jobs, null)
+    }
+
+    /** Step 2: baca pickup, dropoff dan km ikut `fieldMap` (+ `detailPath` pilihan) dalam step2_job_details. */
+    fun parseDetail(cfg: StepConfig, body: String): DetailResult {
+        val root = JsonPath.parseRoot(body)
+            ?: return DetailResult(null, "Respons bukan JSON object/array.")
+        if (cfg.fieldMap.isEmpty()) {
+            return DetailResult(null, "fieldMap belum diset dalam ${cfg.id}.")
+        }
+        val node = JsonPath.resolve(root, cfg.detailPath)
+            ?: return DetailResult(null, "detailPath '${cfg.detailPath ?: "$"}' tiada dalam respons.")
+        fun field(key: String): String? =
+            cfg.fieldMap[key]?.let { JsonPath.asString(JsonPath.resolve(node, it)) }
+        return DetailResult(
+            JobDetail(
+                pickup = field("pickup"),
+                dropoff = field("dropoff"),
+                distanceKm = extractNumber(field("distanceKm")),
+            ),
+            null,
+        )
     }
 }

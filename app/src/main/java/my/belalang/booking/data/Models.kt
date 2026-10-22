@@ -16,7 +16,9 @@ data class StepConfig(
     val timeoutMs: Long,
     /** Hanya step1: laluan JSON ke array senarai job, contoh `data.bookings`. */
     val listPath: String?,
-    /** Hanya step1: kunci kad -> laluan JSON dalam setiap item. */
+    /** Hanya step2: laluan JSON ke objek butiran (kosong = akar respons). */
+    val detailPath: String?,
+    /** step1: kunci kad -> laluan JSON dalam setiap item. step2: kunci pickup/dropoff/distanceKm -> laluan. */
     val fieldMap: Map<String, String>,
     /** Hanya step1: nilai placeholder `{serviceType}` bagi setiap jenis. */
     val serviceTypeValues: Map<String, String>,
@@ -50,6 +52,7 @@ data class StepConfig(
                 enabled = (data["enabled"] as? Boolean) ?: (id != STEP4),
                 timeoutMs = ((data["timeoutMs"] as? Number)?.toLong() ?: 15_000L).coerceIn(1_000L, 120_000L),
                 listPath = (data["listPath"] as? String)?.trim()?.takeIf { it.isNotEmpty() },
+                detailPath = (data["detailPath"] as? String)?.trim()?.takeIf { it.isNotEmpty() },
                 fieldMap = stringMap(data["fieldMap"]),
                 serviceTypeValues = stringMap(data["serviceTypeValues"]),
                 kliaKeywords = (data["kliaKeywords"] as? List<*>)
@@ -75,6 +78,13 @@ data class JobCard(
     val searchText: String
         get() = listOfNotNull(id, jobType, title, pickup, dropoff, fare, time, serviceType).joinToString(" ")
 }
+
+/** Data daripada respons Step 2 (butiran booking). */
+data class JobDetail(
+    val pickup: String?,
+    val dropoff: String?,
+    val distanceKm: Double?,
+)
 
 data class ApiResponse(val code: Int?, val body: String, val error: String?) {
     val isHttpSuccess: Boolean get() = code != null && code in 200..299

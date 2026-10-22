@@ -1,14 +1,15 @@
 package my.belalang.booking
 
 import my.belalang.booking.data.JobCard
+import my.belalang.booking.data.JobDetail
 import my.belalang.booking.data.JobParser
 import my.belalang.booking.data.JsonPath
 import my.belalang.booking.data.ServiceType
 import my.belalang.booking.data.StepConfig
 import my.belalang.booking.data.Template
-import my.belalang.booking.domain.JobFilter
+import my.belalang.booking.domain.Criteria
 import my.belalang.booking.domain.JobFilterEngine
-import my.belalang.booking.domain.SortKey
+import my.belalang.booking.domain.Step1Filter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -18,23 +19,30 @@ import org.junit.Test
 
 class CoreTest {
     // Data contoh rekaan untuk ujian sahaja; BUKAN format API sebenar.
-    private val sample = """{"payload":{"items":[
-        {"ref":"A1","kind":"x","from":"Taman A","to":"KLIA T1","dist":"12.5 Km","price":"RM80.00","at":"06:00"},
-        {"ref":"A2","kind":"x","from":"Taman B","to":"Bandar C","dist":"30","price":"RM40.00","at":"07:00"},
-        {"ref":"A3","kind":"y","from":"Pantai","to":"KLIA T2","dist":"45.1","price":"RM120.00","at":"05:00"}
+    private val list = """{"payload":{"items":[
+        {"ref":"A1","svc":"Standard (To KLIA)","price":"RM80.00","at":"06:00 AM"},
+        {"ref":"A2","svc":"Standard","price":"RM40.00","at":"07:30 AM"},
+        {"ref":"A3","svc":"Plus (To KLIA)","price":"RM120.00","at":"05:00 PM"}
     ]}}"""
 
-    private fun cfg(map: Map<String, Any?>) = StepConfig.fromMap(StepConfig.STEP1, map)
+    private val detail = """{"booking":{"from":"Taman A","to":"KLIA T1","km":"12.5 Km"}}"""
 
-    private val step1 = cfg(
+    private val step1 = StepConfig.fromMap(
+        StepConfig.STEP1,
         mapOf(
             "url" to "https://example.invalid/list",
             "listPath" to "payload.items",
-            "fieldMap" to mapOf(
-                "id" to "ref", "jobType" to "kind", "pickup" to "from", "dropoff" to "to",
-                "distanceKm" to "dist", "fare" to "price", "time" to "at",
-            ),
+            "fieldMap" to mapOf("id" to "ref", "serviceType" to "svc", "fare" to "price", "time" to "at"),
             "kliaKeywords" to listOf("KLIA"),
+        ),
+    )
+
+    private val step2 = StepConfig.fromMap(
+        StepConfig.STEP2,
+        mapOf(
+            "url" to "https://example.invalid/booking/{jobId}",
+            "detailPath" to "booking",
+            "fieldMap" to mapOf("pickup" to "from", "dropoff" to "to", "distanceKm" to "km"),
         ),
     )
 
@@ -46,20 +54,29 @@ class CoreTest {
         assertNull(JsonPath.resolve(root, "a.b[9]"))
     }
 
-    @Test fun parser_buildsCards() {
-        val r = JobParser.parse(step1, sample)
+    @Test fun step1Parser_buildsCards() {
+        val r = JobParser.parse(step1, list)
         assertNull(r.error)
         assertEquals(3, r.jobs.size)
-        assertEquals(12.5, r.jobs[0].distanceKm!!, 0.0001)
-        assertEquals("KLIA T1", r.jobs[0].dropoff)
+        assertEquals("Standard (To KLIA)", r.jobs[0].serviceType)
+        assertEquals("RM80.00", r.jobs[0].fare)
+        assertNull(r.jobs[0].pickup) // pickup datang dari Step 2, bukan Step 1
     }
 
-    @Test fun parser_reportsMissingConfigInsteadOfGuessing() {
-        val noMap = cfg(mapOf("url" to "https://example.invalid/list"))
-        assertNotNull(JobParser.parse(noMap, sample).error)
-        val badPath = cfg(mapOf("fieldMap" to mapOf("id" to "ref"), "listPath" to "nope"))
-        assertNotNull(JobParser.parse(badPath, sample).error)
+    @Test fun step2Parser_readsPickupDropoffKm() {
+        val r = JobParser.parseDetail(step2, detail)
+        assertNull(r.error)
+        assertEquals("Taman A", r.detail!!.pickup)
+        assertEquals("KLIA T1", r.detail!!.dropoff)
+        assertEquals(12.5, r.detail!!.distanceKm!!, 0.0001)
+    }
+
+    @Test fun parsers_reportMissingConfigInsteadOfGuessing() {
+        assertNotNull(JobParser.parse(StepConfig.fromMap("x", mapOf("url" to "u")), list).error)
         assertNotNull(JobParser.parse(step1, "bukan json").error)
+        assertNotNull(JobParser.parseDetail(StepConfig.fromMap("x", mapOf("url" to "u")), detail).error)
+        val badPath = StepConfig.fromMap("x", mapOf("fieldMap" to mapOf("pickup" to "from"), "detailPath" to "nope"))
+        assertNotNull(JobParser.parseDetail(badPath, detail).error)
     }
 
     @Test fun step4_disabledByDefault() {
@@ -68,32 +85,51 @@ class CoreTest {
         assertTrue(StepConfig.fromMap(StepConfig.STEP4, mapOf("enabled" to true)).enabled)
     }
 
-    @Test fun filter_serviceTypeByConfiguredKeywords() {
-        val jobs = JobParser.parse(step1, sample).jobs
-        val klia = JobFilterEngine.apply(jobs, JobFilter(ServiceType.KLIA, listOf("KLIA")))
-        assertEquals(setOf("A1", "A3"), klia.map { it.id }.toSet())
-        val normal = JobFilterEngine.apply(jobs, JobFilter(ServiceType.NORMAL, listOf("KLIA")))
-        assertEquals(listOf("A2"), normal.map { it.id })
-        // Tanpa kata kunci dikonfigurasi: tiada tapisan jenis servis.
-        assertEquals(3, JobFilterEngine.apply(jobs, JobFilter(ServiceType.KLIA, emptyList())).size)
+    @Test fun parseHour_handlesAmPmAnd24h() {
+        assertEquals(6, JobFilterEngine.parseHour("06:30 AM"))
+        assertEquals(17, JobFilterEngine.parseHour("5:00 PM"))
+        assertEquals(0, JobFilterEngine.parseHour("12:15 AM"))
+        assertEquals(12, JobFilterEngine.parseHour("12:15 PM"))
+        assertEquals(18, JobFilterEngine.parseHour("2026-10-22 18:05"))
+        assertNull(JobFilterEngine.parseHour("pagi"))
+        assertNull(JobFilterEngine.parseHour(null))
     }
 
-    @Test fun filter_distanceLocationAvoidSearchSort() {
-        val jobs = JobParser.parse(step1, sample).jobs
-        val base = JobFilter(ServiceType.KLIA, emptyList())
-        assertEquals(listOf("A1", "A2"), JobFilterEngine.apply(jobs, base.copy(maxKm = 35.0)).map { it.id })
-        assertEquals(listOf("A2", "A3"), JobFilterEngine.apply(jobs, base.copy(avoidLocations = listOf("taman a"))).map { it.id })
-        assertEquals(listOf("A3"), JobFilterEngine.apply(jobs, base.copy(includeLocations = listOf("pantai"))).map { it.id })
-        assertEquals(listOf("A2"), JobFilterEngine.apply(jobs, base.copy(query = "bandar")).map { it.id })
-        assertEquals(listOf("A3", "A1", "A2"),
-            JobFilterEngine.apply(jobs, base.copy(sortKey = SortKey.FARE, ascending = false)).map { it.id })
-        assertEquals(listOf("A3", "A1", "A2"),
-            JobFilterEngine.apply(jobs, base.copy(sortKey = SortKey.TIME)).map { it.id })
+    @Test fun step1Filter_serviceFareHour() {
+        val jobs = JobParser.parse(step1, list).jobs
+        val kw = listOf("KLIA")
+        fun ids(f: Step1Filter) = jobs.filter { JobFilterEngine.checkStep1(it, f).pass }.map { it.id }
+
+        assertEquals(listOf("A1", "A3"), ids(Step1Filter(ServiceType.KLIA, kw)))
+        assertEquals(listOf("A2"), ids(Step1Filter(ServiceType.NORMAL, kw)))
+        // Tiada kata kunci dikonfigurasi: tiada tapisan jenis servis.
+        assertEquals(listOf("A1", "A2", "A3"), ids(Step1Filter(ServiceType.KLIA, emptyList())))
+        // Tambang
+        assertEquals(listOf("A1", "A3"), ids(Step1Filter(ServiceType.KLIA, kw, fareMin = 80.0)))
+        assertEquals(listOf("A1"), ids(Step1Filter(ServiceType.KLIA, kw, fareMin = 80.0, fareMax = 100.0)))
+        // Jam: 6 AM sahaja
+        assertEquals(listOf("A1"), ids(Step1Filter(ServiceType.KLIA, kw, hours = setOf(6))))
+        assertEquals(listOf("A3"), ids(Step1Filter(ServiceType.KLIA, kw, hours = setOf(17))))
     }
 
-    @Test fun filter_unknownDistanceIsKept() {
-        val j = listOf(JobCard(id = "Z", distanceKm = null))
-        assertEquals(1, JobFilterEngine.apply(j, JobFilter(maxKm = 1.0)).size)
+    @Test fun step1Filter_reportsReasonForUnreadableValues() {
+        val j = JobCard(id = "Z", fare = "percuma", time = "pagi")
+        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(fareMin = 1.0)).pass)
+        assertFalse(JobFilterEngine.checkStep1(j, Step1Filter(hours = setOf(6))).pass)
+        // Tanpa tapisan aktif, nilai yang tak boleh dibaca tidak menghalang.
+        assertTrue(JobFilterEngine.checkStep1(j, Step1Filter()).pass)
+    }
+
+    @Test fun criteria_locationAndKm() {
+        val d = JobDetail(pickup = "Taman A, KL", dropoff = "KLIA T1", distanceKm = 12.5)
+        assertTrue(JobFilterEngine.checkCriteria(d, Criteria()).pass)
+        assertTrue(JobFilterEngine.checkCriteria(d, Criteria(maxKm = 20.0)).pass)
+        assertFalse(JobFilterEngine.checkCriteria(d, Criteria(maxKm = 10.0)).pass)
+        assertFalse(JobFilterEngine.checkCriteria(d, Criteria(avoidLocations = listOf("taman a"))).pass)
+        assertTrue(JobFilterEngine.checkCriteria(d, Criteria(includeLocations = listOf("klia"))).pass)
+        assertFalse(JobFilterEngine.checkCriteria(d, Criteria(includeLocations = listOf("ipoh"))).pass)
+        // km tiada tetapi had km diset: tak boleh disahkan -> tak sesuai
+        assertFalse(JobFilterEngine.checkCriteria(d.copy(distanceKm = null), Criteria(maxKm = 20.0)).pass)
     }
 
     @Test fun template_replacesAndFlagsUnresolved() {

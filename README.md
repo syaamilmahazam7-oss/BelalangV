@@ -4,7 +4,7 @@ Aplikasi Android (Kotlin + Jetpack Compose) untuk memaparkan senarai booking seb
 
 ## Aliran
 1. Pilih jenis servis: Tambang ke KLIA / Normal.
-2. Filter: lokasi, jarak (km), lokasi dielakkan; carian; sorting; auto-refresh (min 5s, lalai OFF).
+2. Tapisan Step 1: jenis servis, tambang (min/maks), jam pickup. Criteria Step 2: lokasi, jarak, lokasi dielakkan. Carian dan sorting. Auto-fetch bila app dibuka; auto-refresh (min 5s, lalai OFF).
 3. Step 3 Accept dan Step 4 Confirm: **hanya apabila pengguna menekan butang** dan mengesahkan dialog. Step 4 disabled secara lalai.
 
 ## Status
