@@ -60,6 +60,16 @@ object JobParser {
                 ),
             )
         }
+        if (jobs.isEmpty() && list.length() > 0) {
+            val idKey = cfg.fieldMap["id"]
+            val first = list.opt(0)
+            val keys = (first as? JSONObject)?.keys()?.asSequence()?.take(15)?.joinToString(", ")
+            return ParseResult(
+                emptyList(),
+                "senarai ada ${list.length()} item tetapi tiada yang ada medan id '$idKey'. " +
+                    if (keys != null) "Kunci item pertama: $keys" else "Item pertama bukan objek JSON.",
+            )
+        }
         return ParseResult(jobs, null)
     }
 

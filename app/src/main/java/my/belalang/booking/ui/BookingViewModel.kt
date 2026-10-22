@@ -318,7 +318,7 @@ class BookingViewModel(app: Application) : AndroidViewModel(app) {
             log(m); _state.update { it.copy(listStatus = m) }
             return
         }
-        log("Step 1: HTTP ${resp.code} OK, ${parsed.jobs.size} job diterima")
+        log("Step 1: HTTP ${resp.code} OK, ${parsed.jobs.size} job diterima" + if (parsed.jobs.isEmpty()) " (senarai kosong dalam respons)" else "")
         _state.update { it.copy(jobs = parsed.jobs) }
 
         // Tapisan Step 1 (jenis servis, tambang, masa)

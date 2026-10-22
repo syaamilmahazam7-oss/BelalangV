@@ -200,4 +200,15 @@ class CoreTest {
         assertEquals("05:30 PM", job.time)
         assertEquals("Tempat A", job.pickup)
     }
+
+    @Test fun parse_reportsKeysWhenIdFieldMissing() {
+        val cfg = StepConfig.fromMap("step1_job_list", mapOf("listPath" to "items", "fieldMap" to mapOf("id" to "tiadaWujud")))
+        val r = JobParser.parse(cfg, """{"items":[{"ref":"R1","amount":"RM5"}]}""")
+        assertTrue(r.error!!.contains("ref"))
+        assertTrue(r.error!!.contains("tiadaWujud"))
+        // Senarai betul-betul kosong bukan ralat
+        val empty = JobParser.parse(cfg, """{"items":[]}""")
+        assertNull(empty.error)
+        assertEquals(0, empty.jobs.size)
+    }
 }
