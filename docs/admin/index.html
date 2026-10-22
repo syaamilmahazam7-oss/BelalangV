@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BelalangV Admin</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mut:#6b7280;--line:#dfe3ea;--acc:#0a7d4f;--bad:#b42318}
+@media (prefers-color-scheme:dark){:root{--bg:#101215;--card:#181b20;--ink:#e8eaee;--mut:#9aa1ad;--line:#2a2f37;--acc:#3ecf8e;--bad:#ff8a80}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,sans-serif;padding:16px;max-width:760px;margin-inline:auto}
+h1{font-size:20px;margin:4px 0 12px}h2{font-size:15px;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+details.card>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px}
+details.card[open]>summary{margin-bottom:12px}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:80px;font-family:ui-monospace,monospace;font-size:13px}
+button{padding:9px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc)}button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:6px}.row input{flex:1}.row button{padding:7px 10px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mut{color:var(--mut);font-size:12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.ok{color:var(--acc)}.err{color:var(--bad)}.tag{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
+pre{white-space:pre-wrap;word-break:break-all;font-size:12px;background:var(--bg);padding:8px;border-radius:8px;display:none}
+</style>
+</head>
+<body>
+<h1>BelalangV Admin <span class="tag">api_configs</span></h1>
+
+<div class="card" id="conn">
+  <h2>1. Sambungan Firebase</h2>
+  <p class="mut">Nilai ini disimpan hanya dalam pelayar anda (localStorage), tidak dihantar ke mana-mana selain Firebase. Ambil dari Firebase Console → Project settings → Web app (atau dari <code>google-services.json</code>: <code>current_key</code> dan <code>project_id</code>).</p>
+  <label>API key</label><input id="apiKey" autocomplete="off">
+  <label>Project ID</label><input id="projectId" value="belalangv-ef37b" autocomplete="off">
+  <div class="bar"><button class="p" id="btnConn">Sambung</button><button id="btnLogin" disabled>Log masuk Google</button><button id="btnLogout" disabled>Log keluar</button><span id="who" class="mut"></span></div>
+  <div id="connMsg" class="mut"></div>
+</div>
+
+<div id="steps"></div>
+<p class="mut">Membaca dokumen tidak perlukan log masuk. Menyimpan perlukan log masuk dan rules Firestore yang membenarkan e-mel anda menulis (lihat docs/FIRESTORE.md).</p>
+
+<script type="module">
+import {initializeApp} from "https://cdn.jsdelivr.net/npm/firebase@10.14.1/app/+esm";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://cdn.jsdelivr.net/npm/firebase@10.14.1/auth/+esm";
+import {getFirestore,doc,getDoc,setDoc} from "https://cdn.jsdelivr.net/npm/firebase@10.14.1/firestore/+esm";
+
+const STEPS=[
+ {id:"step1_job_list",label:"Step 1: Senarai job",path:"listPath",pathHint:"result.items",fm:["id","serviceType","fare","time","jobType","title"],extra:true},
+ {id:"step2_job_details",label:"Step 2: Butiran job",path:"detailPath",pathHint:"booking",fm:["pickup","dropoff","distanceKm"]},
+ {id:"step3_confirmation",label:"Step 3: Pengesahan (belum ada API)",fm:[]},
+ {id:"step4_future",label:"Step 4: Akan datang (lalai mati)",fm:[],off:true},
+];
+const MOCK={
+ step1_job_list:{enabled:true,method:"GET",url:"https://raw.githubusercontent.com/syaamilmahazam7-oss/BelalangV/main/docs/mock/list.json",listPath:"result.items",fieldMap:{id:"bookingRef",serviceType:"service",fare:"price",time:"pickupTime"},kliaKeywords:["KLIA"]},
+ step2_job_details:{enabled:true,method:"GET",url:"https://raw.githubusercontent.com/syaamilmahazam7-oss/BelalangV/main/docs/mock/detail/{jobId}.json",detailPath:"booking",fieldMap:{pickup:"from",dropoff:"to",distanceKm:"distanceKm"}},
+};
+const $=s=>document.querySelector(s);
+let db=null,auth=null,user=null;
+
+// ---------- UI builder ----------
+function kv(container,obj,keys){
+  container.innerHTML="";
+  const add=(k="",v="")=>{
+    const r=document.createElement("div");r.className="row";
+    const dl=keys&&keys.length?`list="dl-${container.id}"`:"";
+    r.innerHTML=`<input class="k" placeholder="kunci" value="${esc(k)}" ${dl}><input class="v" placeholder="nilai" value="${esc(v)}"><button type="button">x</button>`;
+    r.querySelector("button").onclick=()=>r.remove();
+    container.insertBefore(r,container.querySelector(".addrow"));
+  };
+  if(keys&&keys.length){const d=document.createElement("datalist");d.id="dl-"+container.id;d.innerHTML=keys.map(k=>`<option value="${k}">`).join("");container.appendChild(d)}
+  const a=document.createElement("button");a.type="button";a.className="addrow";a.textContent="+ tambah";a.onclick=()=>add();container.appendChild(a);
+  container._add=add;
+  Object.entries(obj||{}).forEach(([k,v])=>add(k,v));
+}
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+const readKv=c=>{const o={};c.querySelectorAll(".row").forEach(r=>{const k=r.querySelector(".k").value.trim(),v=r.querySelector(".v").value;if(k)o[k]=v});return o};
+
+function build(){
+  const root=$("#steps");root.innerHTML="";
+  STEPS.forEach((s,i)=>{
+    const d=document.createElement("details");d.className="card";d.id=s.id;if(i<2)d.open=true;
+    d.innerHTML=`<summary><h2>${i+2}. ${s.label}</h2><span class="tag" id="st-${s.id}">belum dimuat</span></summary>
+    <div class="g2"><div><label>enabled</label><select class="enabled"><option value="true">true</option><option value="false">false</option></select></div>
+    <div><label>method</label><select class="method">${["GET","POST","PUT","PATCH","DELETE"].map(m=>`<option>${m}</option>`).join("")}</select></div></div>
+    <label>url (guna {jobId} untuk booking ID)</label><input class="url" placeholder="https://...">
+    <label>timeoutMs (1000-120000, kosong = 15000)</label><input class="timeout" inputmode="numeric">
+    ${s.path?`<label>${s.path}</label><input class="path" placeholder="${s.pathHint}">`:""}
+    ${s.fm.length?`<label>fieldMap (kunci app → laluan dalam JSON)</label><div id="fm-${s.id}"></div>`:""}
+    ${s.extra?`<label>kliaKeywords (asingkan dengan koma)</label><input class="klia" placeholder="KLIA">
+    <label>serviceTypeValues (klia / normal → nilai {serviceType})</label><div id="stv-${s.id}"></div>`:""}
+    <label>headers</label><div id="hd-${s.id}"></div>
+    <label>body (templat teks, boleh guna {jobId})</label><textarea class="body"></textarea>
+    <div class="bar"><button class="p save" disabled>Simpan</button><button class="reload">Muat semula</button>${MOCK[s.id]?`<button class="mock">Isi contoh mock</button>`:""}<button class="prev">Pratonton</button><span class="msg mut"></span></div><pre></pre>`;
+    root.appendChild(d);
+    const q=x=>d.querySelector(x);
+    if(s.fm.length)kv($("#fm-"+s.id),{},s.fm);
+    if(s.extra)kv($("#stv-"+s.id),{},["klia","normal"]);
+    kv($("#hd-"+s.id),{});
+    q(".save").onclick=()=>save(s);
+    q(".reload").onclick=()=>load(s);
+    q(".prev").onclick=()=>{const p=q("pre");p.textContent=JSON.stringify(collect(s),null,2);p.style.display=p.style.display==="block"?"none":"block"};
+    if(q(".mock"))q(".mock").onclick=()=>fill(s,MOCK[s.id]);
+  });
+}
+function fill(s,data){
+  const d=$("#"+s.id),q=x=>d.querySelector(x);
+  q(".enabled").value=String(data.enabled??!s.off);
+  q(".method").value=(data.method||"GET").toUpperCase();
+  q(".url").value=data.url||"";
+  q(".timeout").value=data.timeoutMs??"";
+  if(q(".path"))q(".path").value=data[s.path]||"";
+  if(s.fm.length)kv($("#fm-"+s.id),data.fieldMap||{},s.fm);
+  if(s.extra){q(".klia").value=(data.kliaKeywords||[]).join(", ");kv($("#stv-"+s.id),data.serviceTypeValues||{},["klia","normal"])}
+  kv($("#hd-"+s.id),data.headers||{});
+  q(".body").value=data.body||"";
+}
+function collect(s){
+  const d=$("#"+s.id),q=x=>d.querySelector(x),o={};
+  o.enabled=q(".enabled").value==="true";
+  o.method=q(".method").value;
+  o.url=q(".url").value.trim();
+  const t=parseInt(q(".timeout").value,10);if(!isNaN(t))o.timeoutMs=t;
+  if(q(".path")&&q(".path").value.trim())o[s.path]=q(".path").value.trim();
+  if(s.fm.length){const m=readKv($("#fm-"+s.id));if(Object.keys(m).length)o.fieldMap=m}
+  if(s.extra){
+    const k=q(".klia").value.split(",").map(x=>x.trim()).filter(Boolean);if(k.length)o.kliaKeywords=k;
+    const m=readKv($("#stv-"+s.id));if(Object.keys(m).length)o.serviceTypeValues=m;
+  }
+  const h=readKv($("#hd-"+s.id));if(Object.keys(h).length)o.headers=h;
+  if(q(".body").value.trim())o.body=q(".body").value;
+  return o;
+}
+function msg(s,t,cls=""){const m=$("#"+s.id+" .msg");m.textContent=t;m.className="msg "+(cls||"mut")}
+
+// ---------- Firestore ----------
+async function load(s){
+  if(!db)return msg(s,"Sambung dahulu","err");
+  try{
+    const snap=await getDoc(doc(db,"api_configs",s.id));
+    if(snap.exists()){fill(s,snap.data());$("#st-"+s.id).textContent="dimuat";msg(s,"Dimuat dari Firestore","ok")}
+    else{fill(s,{enabled:!s.off});$("#st-"+s.id).textContent="belum wujud";msg(s,"Dokumen belum wujud, isi dan simpan")}
+  }catch(e){msg(s,"Gagal baca: "+e.code,"err")}
+}
+async function save(s){
+  if(!user)return msg(s,"Log masuk dahulu","err");
+  const data=collect(s);
+  if(data.enabled&&!data.url)return msg(s,"enabled=true tetapi url kosong","err");
+  try{await setDoc(doc(db,"api_configs",s.id),data);$("#st-"+s.id).textContent="disimpan";msg(s,"Disimpan ("+Object.keys(data).length+" medan)","ok")}
+  catch(e){msg(s,"Gagal simpan: "+e.code+(e.code==="permission-denied"?" (semak rules dan e-mel anda)":""),"err")}
+}
+function setSave(){document.querySelectorAll(".save").forEach(b=>b.disabled=!(user&&db))}
+
+// ---------- Connect / auth ----------
+function connect(){
+  const apiKey=$("#apiKey").value.trim(),projectId=$("#projectId").value.trim();
+  if(!apiKey||!projectId)return $("#connMsg").textContent="Isi API key dan Project ID";
+  try{localStorage.setItem("bv_admin",JSON.stringify({apiKey,projectId}))}catch{}
+  const app=initializeApp({apiKey,projectId,authDomain:projectId+".firebaseapp.com"},"admin"+Date.now());
+  auth=getAuth(app);db=getFirestore(app);
+  onAuthStateChanged(auth,u=>{user=u;$("#who").textContent=u?u.email:"belum log masuk";$("#btnLogout").disabled=!u;$("#btnLogin").disabled=!!u;setSave()});
+  $("#btnLogin").disabled=false;
+  $("#connMsg").textContent="Tersambung. Memuat dokumen...";$("#connMsg").className="mut ok";
+  STEPS.forEach(load);
+}
+$("#btnConn").onclick=connect;
+$("#btnLogin").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){$("#connMsg").textContent="Log masuk gagal: "+e.code+(e.code==="auth/unauthorized-domain"?" (tambah domain halaman ini di Firebase → Authentication → Settings → Authorized domains)":"");$("#connMsg").className="err"}};
+$("#btnLogout").onclick=()=>signOut(auth);
+
+build();
+try{const c=JSON.parse(localStorage.getItem("bv_admin")||"null");if(c){$("#apiKey").value=c.apiKey;$("#projectId").value=c.projectId;connect()}}catch{}
+</script>
+</body>
+</html>
