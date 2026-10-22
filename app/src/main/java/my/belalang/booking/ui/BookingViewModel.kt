@@ -81,7 +81,7 @@ data class UiState(
     val step1Filter: Step1Filter
         get() = Step1Filter(
             serviceType = serviceType,
-            kliaKeywords = configs[StepConfig.STEP1]?.kliaKeywords ?: emptyList(),
+            kliaKeywords = configs[StepConfig.STEP1]?.kliaKeywords.orEmpty().ifEmpty { DEFAULT_KLIA_KEYWORDS },
             fareMin = fareMin.trim().toDoubleOrNull(),
             fareMax = fareMax.trim().toDoubleOrNull(),
             hours = hours,
@@ -358,3 +358,7 @@ class BookingViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_DETAIL_PER_CYCLE = 20
     }
 }
+
+/** Kata kunci lalai untuk mengenal servis KLIA; Firestore `kliaKeywords` (jika ada) menggantikannya. */
+const val DEFAULT_KLIA_KEYWORDS_VALUE = "KLIA"
+private val DEFAULT_KLIA_KEYWORDS: List<String> = listOf(DEFAULT_KLIA_KEYWORDS_VALUE)

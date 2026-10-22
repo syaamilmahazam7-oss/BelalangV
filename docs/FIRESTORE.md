@@ -24,7 +24,7 @@ Pickup, dropoff dan km datang dari **Step 2**, bukan Step 1.
 | `listPath` | Laluan JSON ke array job (kosong = akar respons ialah array) |
 | `fieldMap` | `id` (booking ID, **wajib**), `serviceType`, `fare`, `time` (pilihan: `jobType`, `title`) |
 | `serviceTypeValues` | map `klia` / `normal` -> nilai untuk `{serviceType}` dalam URL/body (jika API terima parameter itu) |
-| `kliaKeywords` | list<string>: padanan pada `serviceType` untuk mengenal servis KLIA di sisi app. Kosong = tiada tapisan servis |
+| `kliaKeywords` | **Pilihan.** list<string>: padanan untuk mengenal servis KLIA. Jika tiada, app guna `KLIA` secara lalai. Tidak perlu diisi |
 
 ### `step2_job_details`
 | Medan | Maksud |
