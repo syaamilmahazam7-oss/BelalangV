@@ -40,9 +40,9 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:12px;background:var(--bg
 <p class="mut">Membaca dokumen tidak perlukan log masuk. Menyimpan perlukan log masuk dan rules Firestore yang membenarkan e-mel anda menulis (lihat docs/FIRESTORE.md).</p>
 
 <script type="module">
-import {initializeApp} from "https://cdn.jsdelivr.net/npm/firebase@10.14.1/app/+esm";
-import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://cdn.jsdelivr.net/npm/firebase@10.14.1/auth/+esm";
-import {getFirestore,doc,getDoc,setDoc} from "https://cdn.jsdelivr.net/npm/firebase@10.14.1/firestore/+esm";
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const STEPS=[
  {id:"step1_job_list",label:"Step 1: Senarai job",path:"listPath",pathHint:"result.items",fm:["id","serviceType","fare","time","jobType","title"],extra:true},
