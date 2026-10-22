@@ -154,4 +154,15 @@ class CoreTest {
         val r = JobParser.parse(cfg, "<html><body>login</body></html>")
         assertTrue(r.error!!.contains("HTML"))
     }
+
+    @Test fun parse_stripsHtmlTagsFromFields() {
+        val cfg = StepConfig.fromMap(
+            "step1_job_list",
+            mapOf("listPath" to "items", "fieldMap" to mapOf("id" to "ref", "time" to "t", "pickup" to "p")),
+        )
+        val body = """{"items":[{"ref":"R1","t":"<b>05:30 PM</b>","p":"<img src=\"x\"></img> Tempat A"}]}"""
+        val job = JobParser.parse(cfg, body).jobs.single()
+        assertEquals("05:30 PM", job.time)
+        assertEquals("Tempat A", job.pickup)
+    }
 }

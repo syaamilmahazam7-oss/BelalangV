@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.material3.MaterialTheme
+import my.belalang.booking.ui.BelalangTheme
 import my.belalang.booking.ui.BookingApp
 import my.belalang.booking.ui.BookingViewModel
 
@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
             vm.openFromDeepLink(jobId, data.getQueryParameter("jobType"))
         }
         setContent {
-            MaterialTheme { BookingApp(vm) }
+            BelalangTheme { BookingApp(vm) }
         }
     }
 }

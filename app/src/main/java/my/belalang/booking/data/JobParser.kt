@@ -21,6 +21,11 @@ object JobParser {
         else -> "tidak diketahui"
     }
 
+    private val TAGS = Regex("<[^>]*>")
+
+    /** Buang tag HTML ringkas (contoh `<b>05:30 PM</b>`) supaya teks bersih. */
+    fun clean(s: String?): String? = s?.let { if (it.contains('<')) TAGS.replace(it, "").trim() else it }
+
     fun extractNumber(s: String?): Double? = s?.let { NUMBER.find(it)?.value?.toDoubleOrNull() }
 
     fun parse(cfg: StepConfig, body: String): ParseResult {
@@ -39,7 +44,7 @@ object JobParser {
         for (i in 0 until list.length()) {
             val item: JSONObject = list.optJSONObject(i) ?: continue
             fun field(key: String): String? =
-                cfg.fieldMap[key]?.let { JsonPath.asString(JsonPath.resolve(item, it)) }
+                cfg.fieldMap[key]?.let { clean(JsonPath.asString(JsonPath.resolve(item, it))) }
             val id = field("id")?.takeIf { it.isNotBlank() } ?: continue
             jobs.add(
                 JobCard(
