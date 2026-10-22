@@ -138,4 +138,20 @@ class CoreTest {
         assertEquals(listOf("{jobType}"), Template.unresolved("x/{jobType}"))
         assertTrue(Template.unresolved("""{"a":1}""").isEmpty())
     }
+
+    @Test fun parse_handlesBomAndLargeBody() {
+        val cfg = StepConfig.fromMap("step1_job_list", mapOf("listPath" to "d.items", "fieldMap" to mapOf("id" to "ref")))
+        val items = (1..2000).joinToString(",") { """{"ref":"R$it","pad":"xxxxxxxxxxxxxxxxxxxx"}""" }
+        val body = "\uFEFF" + """{"d":{"items":[$items]}}"""
+        assertTrue(body.length > 20_000)
+        val r = JobParser.parse(cfg, body)
+        assertNull(r.error)
+        assertEquals(2000, r.jobs.size)
+    }
+
+    @Test fun parse_nonJsonGivesHint() {
+        val cfg = StepConfig.fromMap("step1_job_list", mapOf("fieldMap" to mapOf("id" to "ref")))
+        val r = JobParser.parse(cfg, "<html><body>login</body></html>")
+        assertTrue(r.error!!.contains("HTML"))
+    }
 }

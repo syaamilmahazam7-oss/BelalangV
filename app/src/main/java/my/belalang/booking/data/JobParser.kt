@@ -25,7 +25,7 @@ object JobParser {
 
     fun parse(cfg: StepConfig, body: String): ParseResult {
         val root = JsonPath.parseRoot(body)
-            ?: return ParseResult(emptyList(), "Respons bukan JSON object/array.")
+            ?: return ParseResult(emptyList(), "Respons bukan JSON object/array (${JsonPath.nonJsonHint(body)}).")
         if (cfg.fieldMap["id"].isNullOrBlank()) {
             return ParseResult(emptyList(), "fieldMap.id belum diset dalam ${cfg.id}.")
         }
@@ -61,7 +61,7 @@ object JobParser {
     /** Step 2: baca pickup, dropoff dan km ikut `fieldMap` (+ `detailPath` pilihan) dalam step2_job_details. */
     fun parseDetail(cfg: StepConfig, body: String): DetailResult {
         val root = JsonPath.parseRoot(body)
-            ?: return DetailResult(null, "Respons bukan JSON object/array.")
+            ?: return DetailResult(null, "Respons bukan JSON object/array (${JsonPath.nonJsonHint(body)}).")
         if (cfg.fieldMap.isEmpty()) {
             return DetailResult(null, "fieldMap belum diset dalam ${cfg.id}.")
         }

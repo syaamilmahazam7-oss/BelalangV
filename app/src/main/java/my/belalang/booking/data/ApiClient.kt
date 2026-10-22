@@ -68,6 +68,6 @@ class ApiClient(private val base: OkHttpClient = OkHttpClient()) {
         }
 
     companion object {
-        const val MAX_BODY = 20_000
+        const val MAX_BODY = 5_000_000
     }
 }

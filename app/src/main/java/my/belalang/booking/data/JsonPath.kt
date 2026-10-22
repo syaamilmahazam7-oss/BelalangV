@@ -6,7 +6,7 @@ import org.json.JSONObject
 /** Penyelesai laluan JSON ringkas: `a.b[0].c` (awalan `$` dibenarkan). */
 object JsonPath {
     fun parseRoot(text: String): Any? {
-        val t = text.trim()
+        val t = text.trimStart('\uFEFF').trim()
         return try {
             when {
                 t.startsWith("[") -> JSONArray(t)
@@ -16,6 +16,19 @@ object JsonPath {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /** Petunjuk ringkas bila respons bukan JSON: panjang dan aksara pertama sahaja (bukan isi). */
+    fun nonJsonHint(text: String): String {
+        val t = text.trimStart('\uFEFF').trim()
+        if (t.isEmpty()) return "respons kosong"
+        val first = t.first()
+        val kind = when {
+            first == '<' -> "nampak seperti HTML/XML"
+            first == '{' || first == '[' -> "bermula seperti JSON tetapi tidak sah/terpotong"
+            else -> "teks biasa"
+        }
+        return "$kind, ${t.length} aksara, aksara pertama '${if (first.isISOControl()) '?' else first}'"
     }
 
     fun tokens(path: String): List<String> {
