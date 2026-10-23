@@ -11,8 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -58,16 +56,6 @@ jobs:
         with:
           name: BelalangV-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-
-      # Terbitkan APK sebagai Release 'latest' (hanya push ke main) supaya mudah dimuat turun.
-      - name: Release APK
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cp app/build/outputs/apk/debug/*.apk BelalangV-debug.apk
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest BelalangV-debug.apk --title "BelalangV latest" --notes "Build ${GITHUB_SHA::7}" --target "$GITHUB_SHA"
 
       # Terbitkan APK sebagai Release 'latest' (hanya push ke main) supaya mudah dimuat turun.
       - name: Release APK
