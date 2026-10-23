@@ -7,6 +7,8 @@
     <!-- Sengaja TIADA AccessibilityService dan TIADA SYSTEM_ALERT_WINDOW.
          Accept/Confirm hanya melalui butang yang ditekan pengguna. -->
     <application
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
